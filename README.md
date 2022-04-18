@@ -2,10 +2,6 @@
 # scAB: Multiresolution dissection of phenotype-associated cell states
 
 
-## Capabilities
-scAB is an R toolkit for simultaneously dissecting multiresolution phenotype-associated cell states and their predictive signatures. The multiresolution cell states include both coarse- and fine-grain cell states, which respectively correspond to all phenotype-associated cells and distinct subsets of phenotype-associated cells with distinct clinical significance. By integrating single-cell and bulk RNA-seq data with phenotype information, scAB exhibits superior performance in resolving multiresolution cell states and molecular signatures for clinical prognosis.
-
-
 ## Installation
 
 scAB R package can be easily installed from Github using devtools:  
