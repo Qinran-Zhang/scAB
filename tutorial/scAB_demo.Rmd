@@ -1,4 +1,3 @@
-
 ---
 title: "Multiresolution dissection of phenotype-associated cell states using scAB"
 author: "Qinran Zhang"
@@ -16,9 +15,10 @@ vignette: >
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  root.dir = './'
+	collapse = TRUE,
+	comment = "#>",
+	root.dir = "./",
+	knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
 )
 #knitr::opts_chunk$set(eval = FALSE)
 ```
@@ -26,6 +26,7 @@ knitr::opts_chunk$set(
 This demonstration outlines the key steps of scAB. The data consist of single-cell RNA-seq data, Bulk-seq data, and the phenotype of patients in bulk samples, which can be downloaded from Github.
 
 ## Load the required libraries
+
 ```{r}
 library(Seurat)
 library(preprocessCore)
@@ -33,7 +34,9 @@ library(scAB)
 ```
 
 ## Load data
+
 The algorithm requires three types of data inputs. Single-cell RNA-seq data is a Seurat object, and bulk RNA-seq data is a digital matrix/data frame. Phenotype data can be a matrix with two columns, time and state, or a vector. Please assign sample names that match the bulk RNA-seq data for phenotype data.
+
 ```{r}
 data("data_survival")
 dim(sc_dataset)
@@ -42,9 +45,10 @@ head(bulk_dataset[,1:10])
 head(phenotype)
 ```
 
+## Preprocessor on Single-cell data
 
-## Preprocessor on Single-cell data 
 We use functions in the Seurat package to preprocess single-cell RNA-seq data and construct a cell-cell similarity network. In this package, we wrapped preprocess functions from Seurat package into the following function: run_seurat.
+
 ```{r,fig.width=6, fig.height = 4, fig.align = "center"}
 sc_dataset <- run_seurat(sc_dataset,verbose = FALSE)
 UMAP_celltype <- DimPlot(sc_dataset, reduction ="umap",group.by="celltype")
@@ -52,20 +56,26 @@ UMAP_celltype
 ```
 
 ## Create a scAB object
+
 Run "create_scAB" function to calculate the sample-cell similarity matrix and the score of the sample phenotype.
+
 ```{r}
 scAB_data <- create_scAB(sc_dataset,bulk_dataset,phenotype)
 ```
 
 ## Selection of parameter K
+
 The function 'select_K' can aid in selecting k. K is a suitable value when the downward trend of reconstruction error slows down.
+
 ```{r}
 K <- select_K(scAB_data)
 K
 ```
 
 ## Run scAB model
-Run the scAB model with default parameters. The regularization parameters α1 and α2 could be also determined using cross-validation method via ‘select_alpha’ function.
+
+Run the scAB model with default parameters. The regularization parameters α1 and α2 could be also determined using cross-validation method via 'select_alpha' function.
+
 ```{r}
 set.seed(7)
 scAB_result=scAB(Object=scAB_data, K=K)
@@ -73,12 +83,14 @@ sc_dataset <- findSubset(sc_dataset, scAB_Object = scAB_result, tred = 2)
 ```
 
 ## Visualize the cells associated with the phenotype
+
 ```{r,fig.width=10, fig.height = 4, fig.align = "center"}
 UMAP_scAB <- DimPlot(sc_dataset,group.by="scAB_select",cols=c("#80b1d3","red"),pt.size=0.001,order=c("scAB+ cells","Other cells"))
 patchwork::wrap_plots(plots = list(UMAP_celltype,UMAP_scAB), ncol = 2)
 ```
 
-## Visualize the cell subsets 
+## Visualize the cell subsets
+
 ```{r,fig.width=10, fig.height = 4, fig.align = "center"}
 UMAP_subset3 <- DimPlot(sc_dataset,group.by="scAB_Subset3",cols=c("#80b1d3","red"),pt.size=0.001,order=c("scAB+ cells","Other cells"))
 UMAP_subset5 <- DimPlot(sc_dataset,group.by="scAB_Subset4",cols=c("#80b1d3","red"),pt.size=0.001,order=c("scAB+ cells","Other cells"))
@@ -86,8 +98,18 @@ UMAP_subset <- patchwork::wrap_plots(plots = list(UMAP_subset3,UMAP_subset5), nc
 UMAP_subset
 ```
 
+## Identify signature genes
+
+We use log-fold changes of 1 as the cutoff to identify the most differentially expressed signature genes, which is helpful for selecting potential biomarkers. The cutoff value may be dependent on the specific datasets and users can adjust this parameter value. Lower cutoff values lead to more candidate signature genes.
+
+```{r}
+markers <- FindMarkers(sc_dataset, ident.1 = "scAB+ cells", group.by = 'scAB_select', logfc.threshold = 1)
+markers <- markers[which(markers$p_val_adj<0.05),]
+head(markers)
+```
+
 ## Information about the current R session
+
 ```{r}
 sessionInfo()
 ```
-
