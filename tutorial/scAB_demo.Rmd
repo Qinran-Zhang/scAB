@@ -1,7 +1,7 @@
 ---
 title: "Multiresolution dissection of phenotype-associated cell states using scAB"
 author: "Qinran Zhang"
-date: "17 April, 2022"
+date: "31 October, 2022"
 output:
   html_document:
     toc: true
