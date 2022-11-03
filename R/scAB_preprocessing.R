@@ -48,13 +48,13 @@
 
 ### Single-cell preprocess
 run_seurat <- function(Obejct,
-                                 normalization.method = "LogNormalize",
-                                 scale.factor = 10000,
-                                 selection.method = "vst",
-                                 dims_Neighbors = 1:40,
-                                 dims_UMAP = 1:10,
-                                 verbose = TRUE){
-
+                       normalization.method = "LogNormalize",
+                       scale.factor = 10000,
+                       selection.method = "vst",
+                       dims_Neighbors = 1:40,
+                       dims_UMAP = 1:10,
+                       verbose = TRUE){
+  
   Obejct <- Seurat::NormalizeData(object = Obejct, normalization.method = normalization.method, scale.factor = scale.factor, verbose = verbose)
   Obejct <- Seurat::FindVariableFeatures(object = Obejct, nfeatures = 3000,selection.method = selection.method, verbose = verbose)
   Obejct <- Seurat::ScaleData(object = Obejct, verbose = verbose)
@@ -88,8 +88,9 @@ setClass("scAB_data",slots=list(X="matrix",
                                 L="matrix",
                                 D="matrix",
                                 A="matrix",
-                                phenotype="matrix")
-         )
+                                phenotype="matrix",
+                                mathod="character")
+)
 
 
 ###  scAB_data preprocess
@@ -115,7 +116,9 @@ create_scAB <- function(Obejct,bulk_dataset,phenotype,method=c("survival","binar
   D <- diag(rowSums(A))
   D12 <- diag(1/sqrt(rowSums(A)))
   L <- D12%*%(D-A)%*%D12
-
+  Dhat <- D12%*%(D)%*%D12
+  Ahat <- D12%*%(A)%*%D12
+  
   # similarity matrix
   sc_exprs <- as.data.frame(Obejct@ assays$ RNA@data)
   common <- intersect(rownames(bulk_dataset), rownames(sc_exprs))
@@ -127,7 +130,7 @@ create_scAB <- function(Obejct,bulk_dataset,phenotype,method=c("survival","binar
   Expression_cell <- dataset1[,(ncol(bulk_dataset) + 1):ncol(dataset1)]
   X <- cor(Expression_bulk, Expression_cell)
   X=X/norm(X,"F")
-
+  
   # phenotype ranking
   if(method=="survival"){
     ss <- guanrank(phenotype[,c("time","status")])
@@ -136,9 +139,9 @@ create_scAB <- function(Obejct,bulk_dataset,phenotype,method=c("survival","binar
   else{
     S <- diag(1-phenotype)
   }
-
+  
   # return
-  obj <- list(X=X,S=S,L=L,D=D,A=A,phenotype=phenotype)
+  obj <- list(X=X,S=S,L=L,D=Dhat,A=Ahat,phenotype=phenotype,method=method)
   class(obj) <- "scAB_data"
   return(obj)
 }

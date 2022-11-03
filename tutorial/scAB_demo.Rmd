@@ -1,7 +1,7 @@
 ---
 title: "Multiresolution dissection of phenotype-associated cell states using scAB"
 author: "Qinran Zhang"
-date: "31 October, 2022"
+date: "3 November, 2022"
 output:
   html_document:
     toc: true
@@ -77,8 +77,7 @@ K
 Run the scAB model with default parameters. The regularization parameters α1 and α2 could be also determined using cross-validation method via 'select_alpha' function.
 
 ```{r}
-set.seed(7)
-scAB_result=scAB(Object=scAB_data, K=K)
+scAB_result <- scAB(Object=scAB_data, K=K)
 sc_dataset <- findSubset(sc_dataset, scAB_Object = scAB_result, tred = 2)
 ```
 

@@ -19,7 +19,7 @@ NMF <- function(X, K,maxiter=2000){
     loss<-norm(X-W%*%H,"F")^2
     return(as.numeric(loss))
   }
-
+  
   for (iter in 1:maxiter){
     H = H*(t(W)%*%X)/ ((t(W)%*%W)%*%H )
     W=W*(X%*%t(H))/(W %*% H %*% t(H)  )
@@ -51,7 +51,9 @@ NMF <- function(X, K,maxiter=2000){
 #' @export
 #'
 #' @examples
-scAB <- function(Object, K,alpha=0.005,alpha_2=5e-05,maxiter=2000){
+scAB <- function(Object, K,alpha=0.005,alpha_2=0.005,maxiter=2000){
+  seed = ifelse(Object$method=="survival",7,5)
+  if(Object$method!="") set.seed(seed)
   X <- Object$X
   A <- Object$A
   L <- Object$L
@@ -87,7 +89,7 @@ scAB <- function(Object, K,alpha=0.005,alpha_2=5e-05,maxiter=2000){
     }
     iter <- iter+1
   }
-  return(list(W=W,H=H,iter=iter,loss=loss_func(X,W,H,S,L,alpha,alpha_2) ))
+  return(list(W=W,H=H,iter=iter,loss=loss_func(X,W,H,S,L,alpha,alpha_2),method=Object$method ))
 }
 
 
@@ -126,7 +128,7 @@ CVgroup <- function(k,datasize,seed = 0){
 #'
 #' @examples
 select_K <- function(Object, K_max=20, repeat_times=10, maxiter=2000, seed=0, verbose = FALSE){
-
+  
   X=Object$X
   set.seed(seed)
   K_all=2:K_max
@@ -143,6 +145,7 @@ select_K <- function(Object, K_max=20, repeat_times=10, maxiter=2000, seed=0, ve
     }
     if(Ki==2) next;
     eii[Ki-1]= (rowMeans(dist_K)[Ki-2]-rowMeans(dist_K)[Ki-1])/(rowMeans(dist_K)[1]- rowMeans(dist_K)[Ki-1])
+    if(rowMeans(dist_K)[Ki-2]-rowMeans(dist_K)[Ki-1]<=0) break;
     if(eii[Ki-1]<0.05 ) break;
   }
   K=Ki-1
@@ -164,7 +167,11 @@ select_K <- function(Object, K_max=20, repeat_times=10, maxiter=2000, seed=0, ve
 #'
 #' @examples
 select_alpha <- function(Object,K,cross_k=5,seed=0){
-  train_phenotype <- Object$phenotype
+  if(Object$method=="survival")  train_phenotype <- Object$phenotype
+    else {
+      train_phenotype=data.frame(status=ifelse(Object$phenotype,1,0),time=ifelse(Object$phenotype,1,100))
+      rownames(train_phenotype)<-rownames(Object$X)
+    }
   train_data <- Object$X
   A_cv <- Object$A
   L_cv <- Object$L
@@ -172,7 +179,7 @@ select_alpha <- function(Object,K,cross_k=5,seed=0){
   datasize <- nrow(train_data)
   cvlist <- CVgroup(k = cross_k,datasize = datasize,seed = seed)
   para_1_list <- c(0.01,0.005,0.001)
-  para_2_list <- c(0.01,0.005,0.001)/100
+  para_2_list <- c(0.01,0.005,0.001)
   result_cv <- matrix(NA,nrow=length(para_1_list),ncol=length(para_2_list))
   times_para <- 0
   pb <- txtProgressBar(style=3)
@@ -188,7 +195,7 @@ select_alpha <- function(Object,K,cross_k=5,seed=0){
         train <- train/norm(train,"F")
         ss <- guanrank(train_c[,c("time","status")])
         S <- diag(1-ss[rownames(train_c),3])# *N
-        Object_cv <- list(X=train,S=S,phenotype=train_c,A=A_cv,L=L_cv,D=D_cv)
+        Object_cv <- list(X=train,S=S,phenotype=train_c,A=A_cv,L=L_cv,D=D_cv,method="")
         class(Object_cv) <- "scAB_data"
         s_res <- scAB(Object=Object_cv, K=K,alpha=para_1_list[para_1],alpha_2=para_2_list[para_2],maxiter=2000)
         ginvH <- MASS::ginv(s_res$H)
@@ -204,7 +211,7 @@ select_alpha <- function(Object,K,cross_k=5,seed=0){
     }
   }
   close(pb)
-
+  
   para_index <- as.numeric(which(result_cv==max(result_cv),arr.ind=TRUE))
   alpha_1 <- para_1_list[para_index[1]]
   alpha_2 <- para_2_list[para_index[2]]
@@ -225,7 +232,7 @@ select_alpha <- function(Object,K,cross_k=5,seed=0){
 #' @export
 #'
 #' @examples
-findModule <- function(H,tred=2){
+findModule <- function(H,tred=2,do.dip=FALSE){
   K = dim(H)[1]
   I=length(H)
   module=list()
@@ -233,14 +240,15 @@ findModule <- function(H,tred=2){
   sdH=apply(H,1,sd)
   for(i in 1:K){
     x <- H[i,]
-    if( diptest::dip.test(x)$p.value >= 0.05)
-      {module=c(module,list( which( H[i,]-meanH[i] > tred*sdH[i] )) )}
-    else {
-            modes <- multimode::locmodes(x, mod0 = 2)
-            module=c(module,list(which( x > modes$locations[2])))}
+    if( do.dip & diptest::dip.test(x)$p.value < 0.05)
+    { modes <- multimode::locmodes(x, mod0 = 2)
+      module=c(module,list(which( x > modes$locations[2])))}
+    else {module=c(module,list( which( H[i,]-meanH[i] > tred*sdH[i] )) )}
   }
   return(module)
 }
+
+
 
 ###  Subsets identification
 #'
@@ -254,13 +262,14 @@ findModule <- function(H,tred=2){
 #'
 #' @examples
 findSubset <- function(Object, scAB_Object, tred = 2){
-  module <- findModule(scAB_Object$H, tred = tred)
+  do.dip <- ifelse(scAB_Object$method=="binary",1,0)
+  module <- findModule(scAB_Object$H, tred = tred, do.dip = do.dip)
   scAB_index <- unique(unlist(module))
-
+  
   scAB_select <- rep("Other cells",ncol(Object))
   scAB_select[scAB_index] <- "scAB+ cells"
   Object <- Seurat::AddMetaData(Object,metadata = scAB_select, col.name = "scAB_select")
-
+  
   for(i in 1:length(module)){
     M <- rep("Other cells",ncol(Object))
     M[as.numeric(module[[i]])]="scAB+ cells"
